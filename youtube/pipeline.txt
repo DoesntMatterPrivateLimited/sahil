@@ -1,0 +1,59 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_ACCOUNT_ID     = "438410424397"
+        AWS_DEFAULT_REGION = "ap-south-1"
+        IMAGE_REPO_NAME    = "yt-ecr"
+        IMAGE_TAG          = "latest"
+        REPOSITORY_URI     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}"
+    }
+
+    tools {
+        nodejs 'node16'
+        jdk 'jdk17'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/sahilhinge89/youtube.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh "npm install"
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                script {
+                    dockerImage = docker.build("${IMAGE_REPO_NAME}:${IMAGE_TAG}")
+                }
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'ecr:ap-south-1:youtube', url: "https://${REPOSITORY_URI}") {
+                        sh "docker tag ${IMAGE_REPO_NAME}:${IMAGE_TAG} ${REPOSITORY_URI}:${IMAGE_TAG}"
+                        sh "docker push ${REPOSITORY_URI}:${IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully. Image pushed to: ${REPOSITORY_URI}:${IMAGE_TAG}"
+        }
+        failure {
+            echo "Pipeline failed. Check console output above for the failing stage."
+        }
+    }
+}
